@@ -16,6 +16,7 @@ flexible in the future.
 - Export annotations for one or more articles by their IDs
 - Converts HTML annotations to Logseq Markdown format (list of blockquotes)
 - Can also export the annotations as plain text (Logseq markdown, with formatting *within* each quote stripped)
+- Output format inspired by the Omnivore Logseq Plugin (currently not customizable)
 
 ## Usage
 
@@ -31,4 +32,12 @@ uv run cli ARTICLE_ID [ARTICLE_ID ...]
 
 ## Example Output
 
-TODO
+<img width="2310" height="1696" alt="image" src="https://github.com/user-attachments/assets/f2e5fc0e-dea5-47d5-b566-c0500da519fd" />
+
+The text is from highlights I made using Readeck for this blog post:
+
+> Source: "Demystifying monads in Rust through property-based testing" — Rain.  
+> © Rain 2020–present. Licensed under CC BY-NC-SA 4.0 unless marked otherwise.  
+> URL: https://sunshowers.io/posts/monads-through-pbt/  
+> Accessed: 2025-11-01
+
