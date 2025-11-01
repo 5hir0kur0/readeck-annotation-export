@@ -51,18 +51,26 @@ def find_common_prefix(list_of_lists: list[list[T]]) -> list[T]:
             break
     return prefix
 
-# New small POD dataclasses for annotations
-@dataclass
-class AnnotationOccurrence:
-    context: List[TagTuple]
-    text: str
-
 @dataclass
 class Annotation:
     color: Optional[str]
-    occurrences: List[AnnotationOccurrence] = field(default_factory=list)
+    context: List[TagTuple]
+    text: str
+    pending_open_context: List[TagTuple] = field(default_factory=list)
     first_index: int = 0
 
+def last_or_none(d: OrderedDict[str, T]) -> Optional[tuple[str, T]]:
+    """Return the last value in the OrderedDict or None if empty."""
+    return next(reversed(d.items())) if d else None
+
+def ctx_up_to_section(stack: list[TagTuple]) -> list[TagTuple]:
+    """Return the context up to the last <section> tag in the stack."""
+    sec_index = -1
+    for i in range(len(stack)-1, -1, -1):
+        if stack[i][0] == "section":
+            sec_index = i
+            break
+    return stack[sec_index+1 :] if sec_index != -1 else stack[:]
 
 class ReadeckExtractor(HTMLParser):
     def __init__(self):
@@ -83,14 +91,19 @@ class ReadeckExtractor(HTMLParser):
         self.stack.append((tag, attrs))
 
         if tag != "rd-annotation":
-            # If we are inside an rd-annotation and a new start tag appears -> error per spec
+            # If we are inside an rd-annotation and a new start tag appears -> error
             if self._inside_rd:
-                logging.warning(
+                logging.error(
                     "Detected HTML start tag <%s> inside an <rd-annotation> (annotation id=%s). "
                     "Per spec, tags inside <rd-annotation> are an error.",
                     tag,
                     self._current_ann_id,
                 )
+            else:
+                last_ann = last_or_none(self.annotations)
+                if last_ann is not None:
+                    ann = last_ann[1]
+                    ann.pending_open_context.append((tag, attrs))
             return
 
         # entering an annotation
@@ -116,15 +129,20 @@ class ReadeckExtractor(HTMLParser):
         if ann_id not in self.annotations:
             self.annotations[ann_id] = Annotation( # type: ignore
                 color=color,
-                occurrences=[],
+                context=[],
+                text="",
                 first_index=self.order_counter,
             )
             self.order_counter += 1
-        else:
-            # update color if we didn't have it before
-            if self.annotations[ann_id].color is None and color is not None:
-                self.annotations[ann_id].color = color
-
+            self.annotations[ann_id].context = self.stack[:-1]  # snapshot of stack without rd-annotation
+            for ctx_tag in ctx_up_to_section(self.annotations[ann_id].context):
+                self.annotations[ann_id].text += open_tag_str(ctx_tag)
+        # update color if we didn't have it before
+        if self.annotations[ann_id].color is None and color is not None:
+            self.annotations[ann_id].color = color
+        self.annotations[ann_id].text += ''.join(open_tag_str(s) for s in self.annotations[ann_id].pending_open_context)
+        self.annotations[ann_id].context += self.annotations[ann_id].pending_open_context
+        self.annotations[ann_id].pending_open_context = []
         return
 
     def handle_startendtag(self, tag, attrs):
@@ -133,17 +151,43 @@ class ReadeckExtractor(HTMLParser):
         self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
+        # pop from stack
+        if self.stack[-1][0] != tag:
+            logging.warning(
+                "Mismatched end tag </%s>; expected </%s>. Ignoring.",
+                tag,
+                self.stack[-1][0],
+            )
+            return
+        self.stack.pop()
+        last_ann = last_or_none(self.annotations)
+        if last_ann is not None and not self._inside_rd:
+            ann = last_ann[1]
+            if ann.pending_open_context and ann.pending_open_context[-1][0] == tag:
+                # remove from pending and do not add to text
+                ann.pending_open_context.pop()
+            if not ann.pending_open_context and ann.context and ann.context[-1][0] == tag and tag != "section":
+                # remove from context and add to text
+                ann.context.pop()
+                ann.text += close_tag_str(tag)
+                logging.debug(
+                    "Appending closing tag </%s> to last annotation id=%s text.",
+                    tag,
+                    last_ann[0],
+                )
+                return
         # If we are ending an rd-annotation, finalize the occurrence
         if tag == "rd-annotation":
             if not self._inside_rd:
+                logging.warning(
+                    "Encountered </rd-annotation> end tag while not inside an rd-annotation; "
+                    "possible malformed HTML with <rd-annotation> tags."
+                )
                 # stray end tag; ignore
                 return
             # capture context: tags after the last <section> in the stack
-            # The stack currently contains the rd-annotation itself as the top element; we pop it later below.
-            # We want the context "up to the <section> level" -> find last index of tag == 'section' in stack (excluding the rd-annotation)
-            # Note: stack currently includes rd-annotation at the top; but content's parent tags are those below it.
-            # Use snapshot of stack excluding the last rd-annotation tuple.
-            stack_snapshot = self.stack[:-1]
+            # We want the context "up to the <section> level" -> find last index of tag == 'section' in stack
+            stack_snapshot = self.stack[:]
             # find last 'section'
             sec_index = -1
             for i in range(len(stack_snapshot)-1, -1, -1):
@@ -154,24 +198,13 @@ class ReadeckExtractor(HTMLParser):
 
             # store occurrence
             text = "".join(self._current_ann_text_parts)
-            occ = AnnotationOccurrence(context=context, text=text)
-            self.annotations[self._current_ann_id].occurrences.append(occ) # type: ignore
+            self.annotations[self._current_ann_id].text += text # type: ignore
 
             # reset annotation state
             self._inside_rd = False
             self._current_ann_id = None
             self._current_ann_color = None
             self._current_ann_text_parts = []
-            # pop the rd-annotation tag itself from stack below
-            # (we will pop it again further down after this function)
-        # Pop matching tag from stack (naive robust pop: pop last matching open tag)
-        # Find the last occurrence of this tag on stack and pop up to it.
-        for i in range(len(self.stack)-1, -1, -1):
-            if self.stack[i][0] == tag:
-                # remove from i..end
-                del self.stack[i:]
-                return
-        # if not found, ignore
 
     def handle_data(self, data):
         if self._inside_rd:
@@ -214,42 +247,16 @@ def extract_readeck_annotations(html_string: str) -> list[ExtractedAnnotation]:
 
     results = []
     for ann_id, meta in p.annotations.items():
-        occurrences = meta.occurrences
-        # compute final base: common prefix of all contexts
-        contexts = [occ.context for occ in occurrences]
-        base = find_common_prefix(contexts)
-
-        # I think this approach works (based on the html output I've seen from Readeck).
-        # It's not very elegant though and could probably be improved...
-
-        # assemble content
-        parts = []
-        # open base tags
-        for tag_tuple in base:
-            parts.append(open_tag_str(tag_tuple))
-
-        for occ in occurrences:
-            ctx = occ.context
-            prefix_len = len(base)
-            extra = ctx[prefix_len:]
-            # open extra tags
-            for tag_tuple in extra:
-                parts.append(open_tag_str(tag_tuple))
-            # append the annotation inner text (already includes entity refs)
-            parts.append(occ.text)
-            # close extra tags in reverse order
-            for tag_tuple in reversed(extra):
-                parts.append(close_tag_str(tag_tuple[0]))
-
-        # close base tags in reverse order
-        for tag_tuple in reversed(base):
-            parts.append(close_tag_str(tag_tuple[0]))
-
-        final_html = "".join(parts)
+        ann = p.annotations[ann_id]
+        # close any remaining open tags in context
+        for tag, _ in reversed(ann.context):
+            if tag == "section":
+                break
+            ann.text += close_tag_str(tag)
         results.append(ExtractedAnnotation(
             id=ann_id,
             color=meta.color,
-            text=final_html,
+            text=ann.text,
         ))
 
     return results
