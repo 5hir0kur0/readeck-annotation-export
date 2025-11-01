@@ -1,6 +1,6 @@
 # Readeck Annotation Export
 
-Basic tool to export Readeck annotations as Markdown-formatted text.
+Basic tool to export [Readeck](https://readeck.org/) annotations as Markdown-formatted text.
 
 The Readeck API supports exporting a whole article as Markdown (with the
 annotations highlighted using `==` syntax). However, there is no built-in way to
