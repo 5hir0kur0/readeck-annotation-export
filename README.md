@@ -14,8 +14,8 @@ flexible in the future.
 ## Features
 
 - Export annotations for one or more articles by their IDs
-- Converts HTML annotations to Markdown format
-- Can also export the annotations as plain text (with all formatting stripped)
+- Converts HTML annotations to Logseq Markdown format (list of blockquotes)
+- Can also export the annotations as plain text (Logseq markdown, with formatting *within* each quote stripped)
 
 ## Usage
 
