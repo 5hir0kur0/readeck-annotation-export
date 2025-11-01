@@ -82,56 +82,50 @@ class ReadeckExtractor(HTMLParser):
         # push to stack
         self.stack.append((tag, attrs))
 
-        if tag == "rd-annotation":
-            # entering an annotation
-            # find id (data-annotation-id-value preferred) and color
-            # attrs may contain ('data-annotation-id-value', '...') or ('id','annotation-...').
-            ann_id = None
-            color = None
-            for k, v in attrs:
-                if k == "data-annotation-id-value" and v:
-                    ann_id = v
-                elif k == "id" and v and ann_id is None:
-                    # fallback: id attribute sometimes is like "annotation-<id>"
-                    if v.startswith("annotation-"):
-                        ann_id = v[len("annotation-"):]
-                elif k == "data-annotation-color":
-                    color = v
-            if ann_id is None:
-                # fallback: try any attr value (rare)
-                for k, v in attrs:
-                    if v and v.startswith("annotation-"):
-                        ann_id = v[len("annotation-"):]
-                        break
-
-            self._inside_rd = True
-            self._current_ann_id = ann_id
-            self._current_ann_color = color
-            self._current_ann_text_parts = []
-
-            # record in annotations dict (OrderedDict keeps insertion order)
-            if ann_id not in self.annotations:
-                self.annotations[ann_id] = Annotation( # type: ignore
-                    color=color,
-                    occurrences=[],
-                    first_index=self.order_counter,
+        if tag != "rd-annotation":
+            # If we are inside an rd-annotation and a new start tag appears -> error per spec
+            if self._inside_rd:
+                logging.warning(
+                    "Detected HTML start tag <%s> inside an <rd-annotation> (annotation id=%s). "
+                    "Per spec, tags inside <rd-annotation> are an error.",
+                    tag,
+                    self._current_ann_id,
                 )
-                self.order_counter += 1
-            else:
-                # update color if we didn't have it before
-                if self.annotations[ann_id].color is None and color is not None:
-                    self.annotations[ann_id].color = color
-
             return
 
-        # If we are inside an rd-annotation and a new start tag appears -> error per spec
-        if self._inside_rd:
-            logging.warning(
-                "Detected HTML start tag <%s> inside an <rd-annotation> (annotation id=%s). "
-                "Per spec, tags inside <rd-annotation> are an error.",
-                tag,
-                self._current_ann_id,
+        # entering an annotation
+        # find id (data-annotation-id-value preferred) and color
+        # attrs may contain ('data-annotation-id-value', '...') or ('id','annotation-...').
+        ann_id = None
+        color = None
+        for k, v in attrs:
+            if k == "data-annotation-id-value" and v:
+                ann_id = v
+            elif k == "data-annotation-color":
+                color = v
+        if ann_id is None:
+            logging.error("rd-annotation tag missing data-annotation-id-value attribute; ignoring annotation.")
+            return
+
+        self._inside_rd = True
+        self._current_ann_id = ann_id
+        self._current_ann_color = color
+        self._current_ann_text_parts = []
+
+        # record in annotations dict (OrderedDict keeps insertion order)
+        if ann_id not in self.annotations:
+            self.annotations[ann_id] = Annotation( # type: ignore
+                color=color,
+                occurrences=[],
+                first_index=self.order_counter,
             )
+            self.order_counter += 1
+        else:
+            # update color if we didn't have it before
+            if self.annotations[ann_id].color is None and color is not None:
+                self.annotations[ann_id].color = color
+
+        return
 
     def handle_startendtag(self, tag, attrs):
         # treat as start followed by end
@@ -204,7 +198,7 @@ class ReadeckExtractor(HTMLParser):
         logging.error("HTMLParser error: %s", message)
 
 
-def extract_readeck_annotations(html_string):
+def extract_readeck_annotations(html_string: str) -> list[str]:
     """
     Parse the html_string and return a list of annotation HTML strings (one per annotation id),
     ordered by first-seen order.
@@ -220,6 +214,9 @@ def extract_readeck_annotations(html_string):
         contexts = [occ.context for occ in occurrences]
         base = find_common_prefix(contexts)
 
+        # I think this approach works (based on the html output I've seen from Readeck).
+        # It's not very elegant though and could probably be improved...
+
         # assemble content
         parts = []
         # open base tags
@@ -228,14 +225,7 @@ def extract_readeck_annotations(html_string):
 
         for occ in occurrences:
             ctx = occ.context
-            # compute extra = ctx after base length (but ensure base matches prefix)
-            # find prefix length by comparing ctx and base
-            prefix_len = 0
-            for a, b in zip(ctx, base):
-                if a == b:
-                    prefix_len += 1
-                else:
-                    break
+            prefix_len = len(base)
             extra = ctx[prefix_len:]
             # open extra tags
             for tag_tuple in extra:
