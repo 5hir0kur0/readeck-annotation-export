@@ -3,7 +3,6 @@ import unittest
 from src.readeck_annotation_export.annotation_extractor import extract_readeck_annotations
 
 
-
 class TestExtractReadeckAnnotations(unittest.TestCase):
     def test_empty_input_returns_empty_list(self):
         self.assertEqual(extract_readeck_annotations(""), [])
@@ -133,6 +132,27 @@ class TestExtractReadeckAnnotations(unittest.TestCase):
         ]
         self.assertEqual(out, expected)
 
+
+class TestFindCommonPrefix(unittest.TestCase):
+    def test_empty_list_returns_empty(self):
+        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+
+        self.assertEqual(find_common_prefix([]), [])
+
+    def test_no_common_prefix(self):
+        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+
+        self.assertEqual(find_common_prefix([[1, 2], [3, 4]]), [])
+
+    def test_common_prefix(self):
+        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+
+        self.assertEqual(find_common_prefix([[1, 2, 3], [1, 2, 4], [1, 2]]), [1, 2])
+
+    def test_full_common_prefix(self):
+        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+
+        self.assertEqual(find_common_prefix([[1, 2], [1, 2], [1, 2]]), [1, 2])
 
 
 if __name__ == "__main__":
