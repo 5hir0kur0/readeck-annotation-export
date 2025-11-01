@@ -1,1 +1,2 @@
 READECK_URL_FALLBACK = "http://localhost:8000"
+USE_HTML_EXTRACTION = True

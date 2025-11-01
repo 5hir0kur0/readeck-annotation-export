@@ -1,10 +1,13 @@
+import logging
 import os
 import sys
 import urllib.request
 import json
 from datetime import datetime
+from markdownify import markdownify
 
-from readeck_annotation_export.constants import READECK_URL_FALLBACK
+from readeck_annotation_export.annotation_extractor import extract_readeck_annotations
+from readeck_annotation_export.constants import READECK_URL_FALLBACK, USE_HTML_EXTRACTION
 
 def format_date(iso_date: str) -> str:
     iso_date = iso_date.split("T")[0]
@@ -58,17 +61,30 @@ def generate_article(**article):
     )
 
 
-def readeck_get(url):
+def readeck_headers() -> dict[str, str]:
     auth_token = os.environ.get("READECK_AUTH_TOKEN")
     if not auth_token:
         raise ValueError("READECK_AUTH_TOKEN environment variable not set")
     headers = {
         "Authorization": f"Bearer {auth_token}",
     }
-    print("requesting:", readeck_url(url), file=sys.stderr)
+    return headers
+
+def readeck_get(url):
+    headers=readeck_headers()
+    logging.debug("requesting: %s", readeck_url(url))
     req = urllib.request.Request(readeck_url(url), headers=headers)
     with urllib.request.urlopen(req) as response:
         data = json.loads(response.read())
+        return data
+
+
+def readeck_get_raw(url: str) -> str:
+    headers=readeck_headers()
+    logging.debug("requesting: %s", readeck_url(url))
+    req = urllib.request.Request(readeck_url(url), headers=headers)
+    with urllib.request.urlopen(req) as response:
+        data = response.read().decode("utf-8")
         return data
 
 
@@ -76,8 +92,19 @@ def get_bookmark(id):
     return readeck_get(f"/api/bookmarks/{id}")
 
 
+def to_markdown(html: str) -> str:
+    return markdownify(html, heading_style="ATX", bullets='*').strip()
+
+
 def get_annotations(id):
-    return readeck_get(f"/api/bookmarks/{id}/annotations")
+    if not USE_HTML_EXTRACTION:
+        return readeck_get(f"/api/bookmarks/{id}/annotations")
+    data = readeck_get_raw(f"/api/bookmarks/{id}/article")
+    html_annotations = extract_readeck_annotations(data)
+    return [
+        {"text": to_markdown(ann.text), "color": ann.color}
+        for ann in html_annotations
+    ]
 
 
 def generate_articles(article_ids):

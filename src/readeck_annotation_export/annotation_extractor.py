@@ -197,8 +197,13 @@ class ReadeckExtractor(HTMLParser):
     def error(self, message):
         logging.error("HTMLParser error: %s", message)
 
+@dataclass
+class ExtractedAnnotation:
+    id: str
+    color: Optional[str]
+    text: str
 
-def extract_readeck_annotations(html_string: str) -> list[str]:
+def extract_readeck_annotations(html_string: str) -> list[ExtractedAnnotation]:
     """
     Parse the html_string and return a list of annotation HTML strings (one per annotation id),
     ordered by first-seen order.
@@ -241,6 +246,10 @@ def extract_readeck_annotations(html_string: str) -> list[str]:
             parts.append(close_tag_str(tag_tuple[0]))
 
         final_html = "".join(parts)
-        results.append(final_html)
+        results.append(ExtractedAnnotation(
+            id=ann_id,
+            color=meta.color,
+            text=final_html,
+        ))
 
     return results

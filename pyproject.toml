@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "markdownify>=1.2.0",
+]
 
 [project.scripts]
 readeck-annotation-export = "readeck_annotation_export.cli:main"
