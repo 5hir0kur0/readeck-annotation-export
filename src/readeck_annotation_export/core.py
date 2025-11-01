@@ -49,9 +49,23 @@ def generate_article(**article):
     for annotation in article.get("annotations", []):
         lines = annotation["text"].split("\n")
         color = annotation["color"] and f'background-color:: {annotation["color"]}'
-        annotations_rendered += (
-            f"\t\t- {color}\n\t\t  > " + "\n\t\t  > ".join(lines) + "\n"
-        )
+        if '```' not in annotation["text"]:
+            annotations_rendered += (
+                f"\t\t- {color}\n\t\t  > " + "\n\t\t  > ".join(lines) + "\n"
+            )
+        else:
+            # Fix code block rendering. Logseq doesn't support indented code blocks in blockquotes.
+            # Use the following syntax instead:
+            # #+BEGIN_QUOTE
+            # ```
+            # code...
+            # ```
+            # #+END_QUOTE
+            annotations_rendered += (
+                f"\t\t- {color}\n\t\t  #+BEGIN_QUOTE\n"
+                + "\n".join("\t\t  " + line for line in lines)
+                + "\n\t\t  #+END_QUOTE\n"
+            )
     return (
         f'\t- [{article["title"]}]({
             readeck_url('bookmarks', article["id"])

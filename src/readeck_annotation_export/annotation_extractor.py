@@ -170,11 +170,6 @@ class ReadeckExtractor(HTMLParser):
                 # remove from context and add to text
                 ann.context.pop()
                 ann.text += close_tag_str(tag)
-                logging.debug(
-                    "Appending closing tag </%s> to last annotation id=%s text.",
-                    tag,
-                    last_ann[0],
-                )
                 return
         # If we are ending an rd-annotation, finalize the occurrence
         if tag == "rd-annotation":
