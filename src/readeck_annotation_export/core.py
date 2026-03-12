@@ -1,13 +1,23 @@
 import logging
 import os
-import sys
 import urllib.request
 import json
 from datetime import datetime
 from markdownify import markdownify
+import http.client
 
 from readeck_annotation_export.annotation_extractor import extract_readeck_annotations
-from readeck_annotation_export.constants import READECK_URL_FALLBACK, USE_HTML_EXTRACTION
+from readeck_annotation_export.constants import (
+    READECK_URL_FALLBACK,
+    USE_HTML_EXTRACTION,
+)
+
+try:
+    # The default limit of 100 headers may be too low for some requests
+    http.client._MAXHEADERS = 1000
+except:
+    pass
+
 
 def format_date(iso_date: str) -> str:
     iso_date = iso_date.split("T")[0]
@@ -37,21 +47,24 @@ def generate_article(**article):
         "type:: [[Article]]",
         f'url:: {article["url"]}',
         f'{article["authors"] and
-            "author:: " + ", ".join(
-                [f"[[{author}]]" for author in article["authors"]]
-            ) or ""}',
+           "author:: " + ", ".join(
+            [f"[[{author}]]" for author in article["authors"]]
+        ) or ""}',
         f'{f"links:: [[Readeck]]" +
-            "".join([f", [[{label}]]" for label in article["labels"]]) +
-            (article["site_name"] and f", [[{article["site_name"]}]]")}',
+           "".join([f", [[{label}]]" for label in article["labels"]]) +
+           (article["site_name"] and f", [[{article["site_name"]}]]")}',
         f'{article.get("published", "") and "date-published:: " + format_date(article["published"])}',
     ]
     annotations_rendered = ""
+    print(article)
     for annotation in article.get("annotations", []):
         lines = annotation["text"].split("\n")
-        color = annotation["color"] and f'background-color:: {annotation["color"]}'
-        if '```' not in annotation["text"]:
+        color = ""
+        if annotation["color"] and annotation["color"] != "none":
+            color = f'background-color:: {annotation["color"]}\n\t\t  '
+        if "```" not in annotation["text"]:
             annotations_rendered += (
-                f"\t\t- {color}\n\t\t  > " + "\n\t\t  > ".join(lines) + "\n"
+                    f"\t\t- {color}> " + "\n\t\t  > ".join(lines) + "\n"
             )
         else:
             # Fix code block rendering. Logseq doesn't support indented code blocks in blockquotes.
@@ -62,16 +75,19 @@ def generate_article(**article):
             # ```
             # #+END_QUOTE
             annotations_rendered += (
-                f"\t\t- {color}\n\t\t  #+BEGIN_QUOTE\n"
-                + "\n".join("\t\t  " + line for line in lines)
-                + "\n\t\t  #+END_QUOTE\n"
+                    f"\t\t- {color}#+BEGIN_QUOTE\n"
+                    + "\n".join("\t\t  " + line for line in lines)
+                    + "\n\t\t  #+END_QUOTE\n"
             )
+        note = annotation.get("note") or ""
+        if note:
+            annotations_rendered += f"\t\t\t- {'\n\t\t\t  '.join(note.split('\n'))}\n"
     return (
-        f'\t- [{article["title"]}]({
+            f'\t- [{article["title"]}]({
             readeck_url('bookmarks', article["id"])
-        })\n'
-        + "".join("\t  " + prop + "\n" for prop in properties if prop)
-        + annotations_rendered
+            })\n'
+            + "".join("\t  " + prop + "\n" for prop in properties if prop)
+            + annotations_rendered
     )
 
 
@@ -84,8 +100,9 @@ def readeck_headers() -> dict[str, str]:
     }
     return headers
 
+
 def readeck_get(url):
-    headers=readeck_headers()
+    headers = readeck_headers()
     logging.debug("requesting: %s", readeck_url(url))
     req = urllib.request.Request(readeck_url(url), headers=headers)
     with urllib.request.urlopen(req) as response:
@@ -94,7 +111,7 @@ def readeck_get(url):
 
 
 def readeck_get_raw(url: str) -> str:
-    headers=readeck_headers()
+    headers = readeck_headers()
     logging.debug("requesting: %s", readeck_url(url))
     req = urllib.request.Request(readeck_url(url), headers=headers)
     with urllib.request.urlopen(req) as response:
@@ -107,17 +124,19 @@ def get_bookmark(id):
 
 
 def to_markdown(html: str) -> str:
-    return markdownify(html, heading_style="ATX", bullets='*').strip()
+    return markdownify(html, heading_style="ATX", bullets="*").strip()
 
 
-def get_annotations(id):
+def get_annotations(id: str):
+    annotations = readeck_get(f"/api/bookmarks/{id}/annotations")
     if not USE_HTML_EXTRACTION:
-        return readeck_get(f"/api/bookmarks/{id}/annotations")
+        return annotations
+    annotations_dict = {ann["id"]: ann for ann in annotations}
     data = readeck_get_raw(f"/api/bookmarks/{id}/article")
     html_annotations = extract_readeck_annotations(data)
     return [
-        {"text": to_markdown(ann.text), "color": ann.color}
-        for ann in html_annotations
+        {"text": to_markdown(ann.text), "color": ann.color, "note": annotations_dict[ann.id].get("note")} for ann in
+        html_annotations
     ]
 
 
@@ -130,7 +149,7 @@ def generate_articles(article_ids):
     ]
     heading = "- ## 🔖 Articles"
     return (
-        heading
-        + "\n"
-        + "".join(generate_article(**article) for article in articles_extended)
+            heading
+            + "\n"
+            + "".join(generate_article(**article) for article in articles_extended)
     )
