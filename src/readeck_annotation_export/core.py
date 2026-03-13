@@ -56,7 +56,6 @@ def generate_article(**article):
         f'{article.get("published", "") and "date-published:: " + format_date(article["published"])}',
     ]
     annotations_rendered = ""
-    print(article)
     for annotation in article.get("annotations", []):
         lines = annotation["text"].split("\n")
         color = ""
