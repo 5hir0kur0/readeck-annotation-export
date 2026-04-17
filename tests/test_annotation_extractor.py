@@ -1,6 +1,6 @@
 import unittest
 
-from src.readeck_annotation_export.annotation_extractor import ExtractedAnnotation, extract_readeck_annotations
+from readeck_annotation_export.annotation_extractor import ExtractedAnnotation, extract_readeck_annotations
 
 
 class TestExtractReadeckAnnotations(unittest.TestCase):
@@ -133,22 +133,22 @@ ExtractedAnnotation(id="GrTY4hq1UNuYcqyYA1pzzP", color="yellow", text="""<div><h
 
 class TestFindCommonPrefix(unittest.TestCase):
     def test_empty_list_returns_empty(self):
-        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+        from readeck_annotation_export.annotation_extractor import find_common_prefix
 
         self.assertEqual(find_common_prefix([]), [])
 
     def test_no_common_prefix(self):
-        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+        from readeck_annotation_export.annotation_extractor import find_common_prefix
 
         self.assertEqual(find_common_prefix([[1, 2], [3, 4]]), [])
 
     def test_common_prefix(self):
-        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+        from readeck_annotation_export.annotation_extractor import find_common_prefix
 
         self.assertEqual(find_common_prefix([[1, 2, 3], [1, 2, 4], [1, 2]]), [1, 2])
 
     def test_full_common_prefix(self):
-        from src.readeck_annotation_export.annotation_extractor import find_common_prefix
+        from readeck_annotation_export.annotation_extractor import find_common_prefix
 
         self.assertEqual(find_common_prefix([[1, 2], [1, 2], [1, 2]]), [1, 2])
 

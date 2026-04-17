@@ -12,6 +12,12 @@ dependencies = [
 readeck-annotation-export = "readeck_annotation_export.cli:main"
 cli = "readeck_annotation_export.cli:main"
 
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [build-system]
 requires = ["uv_build>=0.9.7,<0.10.0"]
 build-backend = "uv_build"
