@@ -4,8 +4,11 @@ from html.parser import HTMLParser
 from collections import OrderedDict
 import logging
 import html
+import re
 from dataclasses import dataclass, field
 from typing import TypeVar, Optional, List
+
+_PREFORMATTED_TAGS = frozenset({"pre", "code", "textarea"})
 
 HtmlAttribute = tuple[str, str | None]  # (key, value) where value can be None
 TagTuple = tuple[str, List[HtmlAttribute]]
@@ -203,7 +206,11 @@ class ReadeckExtractor(HTMLParser):
 
     def handle_data(self, data):
         if self._inside_rd:
-            # append raw data (keep entities as in original - we handle them in entity handlers)
+            # Collapse whitespace outside preformatted contexts. HTML treats whitespace
+            # in inline content as collapsible, but Readeck's raw HTML often has cosmetic
+            # newlines that would otherwise appear as literal line breaks in the markdown output.
+            if not any(tag in _PREFORMATTED_TAGS for tag, _ in self.stack):
+                data = re.sub(r"\s+", " ", data)
             self._current_ann_text_parts.append(data)
 
     def handle_entityref(self, name):
